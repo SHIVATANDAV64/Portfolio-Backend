@@ -1,0 +1,12 @@
+{
+    "name": "portfolio-backend",
+    "version": "1.0.0",
+    "description": "Appwrite Functions backend for Portfolio CMS",
+    "type": "module",
+    "scripts": {
+        "deploy": "appwrite deploy function"
+    },
+    "devDependencies": {
+        "node-appwrite": "^14.0.0"
+    }
+}
