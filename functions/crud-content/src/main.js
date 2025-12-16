@@ -1,34 +1,5 @@
-import { Client, Databases, ID, Query, Storage } from 'node-appwrite';
-
-// JWT verification helper (same as admin-auth)
-const verifyJWT = async (token, secret) => {
-    try {
-        const parts = token.split('.');
-        if (parts.length !== 3) return null;
-
-        const [headerEncoded, payloadEncoded, signature] = parts;
-
-        const crypto = await import('crypto');
-        const expectedSignature = crypto.createHmac('sha256', secret)
-            .update(`${headerEncoded}.${payloadEncoded}`)
-            .digest('base64')
-            .replace(/\+/g, '-')
-            .replace(/\//g, '_')
-            .replace(/=/g, '');
-
-        if (signature !== expectedSignature) return null;
-
-        const payload = JSON.parse(Buffer.from(payloadEncoded, 'base64').toString());
-
-        if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
-            return null;
-        }
-
-        return payload;
-    } catch {
-        return null;
-    }
-};
+import { Client, Databases, Users, ID, Query, Storage } from 'node-appwrite';
+import jwt from 'jsonwebtoken';
 
 // Collections that CMS can manage
 const MANAGED_COLLECTIONS = [
@@ -43,36 +14,77 @@ const MANAGED_COLLECTIONS = [
     'messages'
 ];
 
+/**
+ * Verify JWT access token
+ */
+const verifyAccessToken = (token, jwtSecret) => {
+    try {
+        const decoded = jwt.verify(token, jwtSecret);
+        if (decoded.type !== 'access') {
+            return { valid: false, error: 'Invalid token type' };
+        }
+        return { valid: true, userId: decoded.userId, email: decoded.email };
+    } catch (err) {
+        if (err.name === 'TokenExpiredError') {
+            return { valid: false, error: 'Token expired', expired: true };
+        }
+        return { valid: false, error: 'Invalid token' };
+    }
+};
+
 export default async ({ req, res, log, error }) => {
+    // Check for JWT secret
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+        error('JWT_SECRET not configured');
+        return res.json({ error: 'Server configuration error' }, 500);
+    }
+
     const client = new Client()
         .setEndpoint(process.env.APPWRITE_ENDPOINT)
         .setProject(process.env.APPWRITE_FUNCTION_PROJECT_ID)
         .setKey(process.env.APPWRITE_API_KEY);
 
     const databases = new Databases(client);
+    const users = new Users(client);
     const storage = new Storage(client);
     const databaseId = process.env.DATABASE_ID;
-    const jwtSecret = process.env.JWT_SECRET;
     const storageBucketId = process.env.STORAGE_BUCKET_ID;
-
-    // Verify JWT from Authorization header
-    const authHeader = req.headers?.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.json({ error: 'Unauthorized - No token provided' }, 401);
-    }
-
-    const token = authHeader.substring(7);
-    const user = await verifyJWT(token, jwtSecret);
-
-    if (!user || user.role !== 'admin') {
-        return res.json({ error: 'Unauthorized - Invalid token' }, 401);
-    }
 
     try {
         const body = JSON.parse(req.body || '{}');
-        const { action, collection, documentId, data } = body;
+        const { action, collection, documentId, data, accessToken } = body;
 
-        // Validate collection
+        // ========================================
+        // JWT Authentication
+        // ========================================
+        if (!accessToken) {
+            return res.json({ error: 'Access token required' }, 401);
+        }
+
+        const tokenResult = verifyAccessToken(accessToken, jwtSecret);
+        if (!tokenResult.valid) {
+            return res.json({
+                error: tokenResult.error,
+                expired: tokenResult.expired || false
+            }, 401);
+        }
+
+        // Verify user still exists and is admin
+        let user;
+        try {
+            user = await users.get(tokenResult.userId);
+        } catch (err) {
+            return res.json({ error: 'User not found' }, 401);
+        }
+
+        if (!user.labels?.includes('admin')) {
+            return res.json({ error: 'Not an admin' }, 403);
+        }
+
+        // ========================================
+        // Collection Validation
+        // ========================================
         if (!collection || !MANAGED_COLLECTIONS.includes(collection)) {
             return res.json({
                 error: 'Invalid collection',
@@ -82,6 +94,9 @@ export default async ({ req, res, log, error }) => {
 
         log(`CMS ${action} on ${collection} by ${user.email}`);
 
+        // ========================================
+        // CRUD Operations
+        // ========================================
         switch (action) {
             case 'list': {
                 const documents = await databases.listDocuments(
@@ -116,11 +131,7 @@ export default async ({ req, res, log, error }) => {
                     databaseId,
                     collection,
                     ID.unique(),
-                    {
-                        ...data,
-                        created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString()
-                    }
+                    data
                 );
                 return res.json({ success: true, document });
             }
@@ -133,10 +144,7 @@ export default async ({ req, res, log, error }) => {
                     databaseId,
                     collection,
                     documentId,
-                    {
-                        ...data,
-                        updated_at: new Date().toISOString()
-                    }
+                    data
                 );
                 return res.json({ success: true, document });
             }

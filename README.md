@@ -1,52 +1,97 @@
-# Portfolio Backend - Appwrite Functions
+# Portfolio Backend
 
-This repository contains the serverless backend for the Portfolio CMS, built using **Appwrite Functions**.
+Appwrite Functions for portfolio API operations.
+
+## Functions
+
+| Function | Trigger | Auth | Purpose |
+|----------|---------|------|---------|
+| `get-content` | GET | None | Fetch public content |
+| `submit-contact` | POST | None | Save contact submissions |
+| `crud-content` | POST | Session | CRUD operations for CMS |
 
 ## Structure
 
 ```
 functions/
-├── get-content/          # Public API for fetching content
-├── submit-contact/       # Contact form handler
-├── admin-auth/           # JWT authentication for CMS
-└── crud-content/         # CRUD operations for CMS admin
+├── get-content/
+│   ├── src/main.js      # Fetch collections
+│   └── package.json
+├── submit-contact/
+│   ├── src/main.js      # Save contact form
+│   └── package.json
+└── crud-content/
+    ├── src/main.js      # CRUD with auth check
+    └── package.json
 ```
 
 ## Setup
 
-1. Install Appwrite CLI: `npm install -g appwrite`
-2. Login: `appwrite login`
-3. Initialize project: `appwrite init project`
-4. Deploy functions: `appwrite deploy function`
+1. Install Appwrite CLI:
+   ```bash
+   npm install -g appwrite-cli
+   ```
+
+2. Login:
+   ```bash
+   appwrite login
+   ```
+
+3. Deploy functions:
+   ```bash
+   appwrite push functions
+   ```
 
 ## Environment Variables
 
-Each function requires these environment variables set in Appwrite Console:
+Set these in **Appwrite Console** for each function:
 
-- `APPWRITE_ENDPOINT` - Your Appwrite Cloud endpoint
-- `APPWRITE_FUNCTION_PROJECT_ID` - Your project ID
-- `APPWRITE_API_KEY` - Your API key with appropriate scopes
-- `DATABASE_ID` - Your database ID
-- `JWT_SECRET` - Secret for JWT token generation (admin-auth only)
+| Variable | Description |
+|----------|-------------|
+| `APPWRITE_ENDPOINT` | Appwrite Cloud endpoint |
+| `APPWRITE_FUNCTION_PROJECT_ID` | Auto-set by Appwrite |
+| `APPWRITE_API_KEY` | API key with required scopes |
+| `DATABASE_ID` | `portfolio_cms` |
 
-## Functions
+## Database Collections
+
+| Collection | Required Fields |
+|------------|-----------------|
+| `hero` | title, subtitle, description, cta_text, cta_link |
+| `about` | title, description, image_url |
+| `skills` | name, category, icon |
+| `projects` | title, category, year, description, image_pc, image_mobile, link |
+| `experience` | role, company, start_date, end_date, description |
+| `services` | title, description, icon |
+| `social_links` | platform, url, icon |
+| `messages` | name, email, subject, message, created_at, read |
+
+## Storage
+
+Bucket: `portfolio_images`
+- Max size: 10MB
+- Allowed: jpg, jpeg, png, webp, gif, svg
+- Permissions: read(any), create(users), delete(users)
+
+## Function Details
 
 ### get-content
-- **Trigger**: HTTP GET
-- **Purpose**: Fetch public content (projects, skills, about, etc.)
-- **Auth**: None required
+```
+GET /?collection=<name>
+Returns: { success, documents }
+```
 
 ### submit-contact
-- **Trigger**: HTTP POST
-- **Purpose**: Save contact form submissions
-- **Auth**: None required
-
-### admin-auth
-- **Trigger**: HTTP POST
-- **Purpose**: Authenticate CMS administrators
-- **Auth**: Returns JWT token
+```
+POST /
+Body: { name, email, subject?, message }
+Returns: { success, id }
+```
 
 ### crud-content
-- **Trigger**: HTTP POST/PUT/DELETE
-- **Purpose**: Create, update, delete CMS content
-- **Auth**: JWT token required
+```
+POST /
+Body: { action, collection, data?, id? }
+Actions: list, get, create, update, delete
+Auth: Requires Appwrite session with admin label
+```

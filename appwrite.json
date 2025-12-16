@@ -1,0 +1,46 @@
+{
+    "projectId": "693dac18000079ae74a5",
+    "projectName": "Portfolio",
+    "functions": [
+        {
+            "$id": "get-content",
+            "name": "Get Content",
+            "runtime": "node-22",
+            "execute": [
+                "any"
+            ],
+            "entrypoint": "src/main.js",
+            "path": "functions/get-content"
+        },
+        {
+            "$id": "submit-contact",
+            "name": "Submit Contact",
+            "runtime": "node-22",
+            "execute": [
+                "any"
+            ],
+            "entrypoint": "src/main.js",
+            "path": "functions/submit-contact"
+        },
+        {
+            "$id": "admin-auth",
+            "name": "Admin Auth",
+            "runtime": "node-22",
+            "execute": [
+                "any"
+            ],
+            "entrypoint": "src/main.js",
+            "path": "functions/admin-auth"
+        },
+        {
+            "$id": "crud-content",
+            "name": "CRUD Content",
+            "runtime": "node-22",
+            "execute": [
+                "users"
+            ],
+            "entrypoint": "src/main.js",
+            "path": "functions/crud-content"
+        }
+    ]
+}
