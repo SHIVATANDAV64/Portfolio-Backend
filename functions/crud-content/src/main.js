@@ -1,4 +1,5 @@
 import { Client, Databases, Users, ID, Query, Storage } from 'node-appwrite';
+import { InputFile } from 'node-appwrite/file';
 import jwt from 'jsonwebtoken';
 
 // Collections that CMS can manage
@@ -83,7 +84,69 @@ export default async ({ req, res, log, error }) => {
         }
 
         // ========================================
-        // Collection Validation
+        // File Operations (no collection validation needed)
+        // ========================================
+        if (action === 'upload') {
+            const { fileData, fileName, mimeType } = body;
+            if (!fileData || !fileName) {
+                return res.json({ error: 'File data and name required' }, 400);
+            }
+
+            // Validate mime type
+            const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
+            if (mimeType && !allowedTypes.includes(mimeType)) {
+                return res.json({ error: 'Invalid file type. Allowed: JPG, PNG, WebP, GIF, SVG' }, 400);
+            }
+
+            try {
+                // Decode base64 to Buffer
+                const buffer = Buffer.from(fileData, 'base64');
+
+                // Validate file size (10MB max)
+                if (buffer.length > 10 * 1024 * 1024) {
+                    return res.json({ error: 'File too large. Maximum: 10MB' }, 400);
+                }
+
+                // Create InputFile from buffer (correct import from node-appwrite/file)
+                const inputFile = InputFile.fromBuffer(buffer, fileName);
+
+                const file = await storage.createFile(
+                    storageBucketId,
+                    ID.unique(),
+                    inputFile
+                );
+
+                // Build public URL
+                const endpoint = process.env.APPWRITE_ENDPOINT;
+                const projectId = process.env.APPWRITE_FUNCTION_PROJECT_ID;
+                const url = `${endpoint}/storage/buckets/${storageBucketId}/files/${file.$id}/view?project=${projectId}`;
+
+                log(`File uploaded: ${file.$id} by ${user.email}`);
+                return res.json({ success: true, fileId: file.$id, url });
+            } catch (uploadErr) {
+                error(`Upload failed: ${uploadErr.message}`);
+                return res.json({ error: 'Upload failed', message: uploadErr.message }, 500);
+            }
+        }
+
+        if (action === 'deleteFile') {
+            const { fileId } = body;
+            if (!fileId) {
+                return res.json({ error: 'File ID required' }, 400);
+            }
+
+            try {
+                await storage.deleteFile(storageBucketId, fileId);
+                log(`File deleted: ${fileId} by ${user.email}`);
+                return res.json({ success: true, deleted: fileId });
+            } catch (deleteErr) {
+                error(`Delete failed: ${deleteErr.message}`);
+                return res.json({ error: 'Delete failed', message: deleteErr.message }, 500);
+            }
+        }
+
+        // ========================================
+        // Collection Validation (for CRUD operations)
         // ========================================
         if (!collection || !MANAGED_COLLECTIONS.includes(collection)) {
             return res.json({
@@ -160,7 +223,7 @@ export default async ({ req, res, log, error }) => {
             default:
                 return res.json({
                     error: 'Invalid action',
-                    allowed: ['list', 'get', 'create', 'update', 'delete']
+                    allowed: ['list', 'get', 'create', 'update', 'delete', 'upload', 'deleteFile']
                 }, 400);
         }
     } catch (err) {

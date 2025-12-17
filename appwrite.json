@@ -37,7 +37,7 @@
             "name": "CRUD Content",
             "runtime": "node-22",
             "execute": [
-                "users"
+                "any"
             ],
             "entrypoint": "src/main.js",
             "path": "functions/crud-content"
